@@ -1,0 +1,10 @@
+scenario,prediction,confidence,attack_probability
+Normal baseline,Attack,85.93,85.93
+High-volume traffic,Attack,98.73,98.73
+Port-scan-like pattern,Attack,94.44,94.44
+HTTP-flood-like pattern,Attack,92.65,92.65
+SSH brute-force-like pattern,Attack,94.62,94.62
+FTP brute-force-like pattern,Attack,85.98,85.98
+RST-heavy pattern,Attack,91.54,91.54
+ICMP-like pattern,Attack,51.79,51.79
+Possible data-exfiltration pattern,Attack,98.85,98.85
