@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title> Network Monitor — Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+    
+<header class="topbar">
+    <div class="brand">
+        <h1> BitsFlux_aiNMS</h1>
+        <span class="tagline">Live Network Monitoring</span>
+    </div>
+    <div class="controls">
+        <button class="btn-primary" onclick="runDiscovery()">Scan Subnet</button>
+        
+        <a class="btn-link" href="/register">Register Device</a>
+
+        <span id="lastUpdate" class="last-update">—</span>
+
+    </div>
+</header>
+
+<main>
+    <section class="summary">
+        <h2>Devices</h2>
+        <p class="hint">
+            Unknown devices appear first. Approve legitimate ones,
+            block rogue devices, and monitor the rest.
+        </p>
+    </section>
+
+    <section id="deviceGrid" class="grid"></section>
+</main>
+
+<script src="/static/monitor.js"></script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Network Monitor — Register Device</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">
+        <h1>Network Monitor</h1>
+        <span class="tagline">Register Known Device</span>
+    </div>
+    <div class="controls">
+        <a class="btn-link" href="/dashboard">Monitoring Dashboard</a>
+    </div>
+</header>
+
+<main>
+    <section class="form-wrap">
+        <h2>Add a Known Device</h2>
+        <p class="hint">
+            Devices registered here will be treated as belonging to the
+            organisation and will be monitored continuously.
+        </p>
+
+        <form id="registerForm" onsubmit="return submitRegister(event);">
+            <label>Device Name *
+                <input type="text" id="device_name" required
+                       placeholder="e.g. Office Printer" />
+            </label>
+            <label>IP Address *
+                <input type="text" id="ip_address" required
+                       placeholder="e.g. 192.168.23.45" />
+            </label>
+            <label>MAC Address
+                <input type="text" id="mac_address"
+                       placeholder="e.g. A8:91:62:12:34:56" />
+            </label>
+            <label>Domain
+                <input type="text" id="domain" placeholder="e.g. hp.com" />
+            </label>
+            <label>Hostname
+                <input type="text" id="hostname" placeholder="optional" />
+            </label>
+            <label>Subnet
+                <input type="text" id="subnet"
+                       placeholder="e.g. 192.x.x.0/24" />
+            </label>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Register Device</button>
+                <span id="registerMsg" class="msg"></span>
+            </div>
+        </form>
+    </section>
+</main>
+
+<script>
+async function submitRegister(event) {
+    event.preventDefault();
+    const payload = {
+        device_name: document.getElementById("device_name").value.trim(),
+        ip_address:  document.getElementById("ip_address").value.trim(),
+        mac_address: document.getElementById("mac_address").value.trim(),
+        domain:      document.getElementById("domain").value.trim(),
+        hostname:    document.getElementById("hostname").value.trim(),
+        subnet:      document.getElementById("subnet").value.trim(),
+    };
+    const msg = document.getElementById("registerMsg");
+    try {
+        const res = await fetch("/api/devices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "registration failed");
+        msg.textContent = "✓ Device registered successfully";
+        msg.style.color = "#28a745";
+        document.getElementById("registerForm").reset();
+    } catch (err) {
+        msg.textContent = "✗ " + err.message;
+        msg.style.color = "#dc3545";
+    }
+    return false;
+}
+</script>
+</body>
+
+</html>

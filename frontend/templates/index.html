@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intrusion Detection — UNSW-NB15</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🛡️ Network Intrusion Detection</h1>
+      <p class="subtitle">XGBoost classifier trained on UNSW-NB15</p>
+    </header>
+
+    <div class="actions">
+      <button id="fillSampleBtn" class="btn-secondary">Load Sample Row</button>
+      <button id="resetBtn" class="btn-secondary">Reset</button>
+      <span id="featureCount" class="badge"></span>
+    </div>
+
+    <form id="predictForm">
+      <div id="formFields" class="grid">
+        <!-- fields injected by JS -->
+      </div>
+
+      <button type="submit" class="btn-primary" id="predictBtn">
+        Predict
+      </button>
+    </form>
+
+    <div id="result" class="result hidden">
+      <div class="result-inner">
+        <div class="result-header">
+          <span id="resultIcon" class="result-icon"></span>
+          <h2 id="resultLabel"></h2>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">Probability of Attack</span>
+            <span class="metric-value" id="probValue">—</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">Confidence</span>
+            <span class="metric-value" id="confValue">—</span>
+          </div>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error hidden"></div>
+  </div>
+
+  <script>
+    const formFields = document.getElementById('formFields');
+    const predictForm = document.getElementById('predictForm');
+    const resultBox = document.getElementById('result');
+    const errorBox = document.getElementById('error');
+
+    let featureMeta = {};   // name -> {value, type}
+    let originalSample = {}; // name -> default value
+
+    // ---- Load feature list on page load ----
+    async function loadFeatures() {
+      const res = await fetch('/features');
+      const data = await res.json();
+      featureMeta = data.features;
+
+      document.getElementById('featureCount').textContent =
+        `${data.count} features`;
+
+      // Save defaults
+      for (const [name, meta] of Object.entries(featureMeta)) {
+        originalSample[name] = meta.value;
+      }
+
+      renderFields();
+    }
+
+    function renderFields() {
+      formFields.innerHTML = '';
+      for (const [name, meta] of Object.entries(featureMeta)) {
+        const wrap = document.createElement('div');
+        wrap.className = 'field';
+
+        const label = document.createElement('label');
+        label.textContent = name;
+        label.htmlFor = `f_${name}`;
+
+        const input = document.createElement('input');
+        input.id = `f_${name}`;
+        input.name = name;
+        input.type = meta.type === 'number' ? 'number' : 'text';
+        if (meta.type === 'number') input.step = 'any';
+        input.value = meta.value === null ? '' : meta.value;
+
+        wrap.appendChild(label);
+        wrap.appendChild(input);
+        formFields.appendChild(wrap);
+      }
+    }
+
+    // ---- Sample / Reset ----
+    document.getElementById('fillSampleBtn').addEventListener('click', () => {
+      for (const [name, val] of Object.entries(originalSample)) {
+        const el = document.getElementById(`f_${name}`);
+        if (el) el.value = val === null ? '' : val;
+      }
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', () => {
+      for (const name of Object.keys(featureMeta)) {
+        const el = document.getElementById(`f_${name}`);
+        if (el) el.value = '';
+      }
+      resultBox.classList.add('hidden');
+      errorBox.classList.add('hidden');
+    });
+
+    // ---- Submit ----
+    predictForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.classList.add('hidden');
+      resultBox.classList.add('hidden');
+
+      const payload = {};
+      let missing = [];
+
+      for (const [name, meta] of Object.entries(featureMeta)) {
+        const el = document.getElementById(`f_${name}`);
+        let raw = el.value.trim();
+
+        if (raw === '') {
+          missing.push(name);
+          continue;
+        }
+
+        if (meta.type === 'number') {
+          const n = parseFloat(raw);
+          if (isNaN(n)) {
+            missing.push(name);
+            continue;
+          }
+          payload[name] = n;
+        } else {
+          payload[name] = raw;
+        }
+      }
+
+      if (missing.length) {
+        showError(`Missing/invalid fields: ${missing.slice(0, 5).join(', ')}` +
+                  (missing.length > 5 ? ` (+${missing.length - 5} more)` : ''));
+        return;
+      }
+
+      const btn = document.getElementById('predictBtn');
+      btn.disabled = true;
+      btn.textContent = 'Predicting...';
+
+      try {
+        const res = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showError(data.error || 'Prediction failed');
+          return;
+        }
+
+        showResult(data);
+      } catch (err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Predict';
+      }
+    });
+
+    function showResult(data) {
+      resultBox.classList.remove('hidden');
+
+      const isAttack = data.prediction === 1;
+      resultBox.className = 'result ' + (isAttack ? 'attack' : 'normal');
+
+      document.getElementById('resultIcon').textContent = isAttack ? '⚠️' : '✅';
+      document.getElementById('resultLabel').textContent = data.label;
+
+      document.getElementById('probValue').textContent =
+        (data.probability * 100).toFixed(2) + '%';
+      document.getElementById('confValue').textContent =
+        (data.confidence * 100).toFixed(2) + '%';
+
+      const fill = document.getElementById('progressFill');
+      fill.style.width = (data.probability * 100).toFixed(1) + '%';
+      fill.style.background = isAttack ? '#e74c3c' : '#2ecc71';
+
+      resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function showError(msg) {
+      errorBox.textContent = '❌ ' + msg;
+      errorBox.classList.remove('hidden');
+    }
+
+    // Init
+    loadFeatures();
+  </script>
+</body>
+</html>

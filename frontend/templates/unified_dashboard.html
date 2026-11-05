@@ -1,0 +1,204 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BitsFlux | Unified Security Dashboard</title>
+   <link rel="stylesheet" href="/static/dashboard.css">
+
+</head>
+
+<body>
+<div class="app">
+    <aside>
+    <div class="brand"> <div class="brand" style="display: flex; align-items: center; gap: 10px;">
+    <!-- THE LOGO SVG -->
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z" stroke="#5aa9ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M12 15V12M12 9V8" stroke="#35d07f" stroke-width="2" stroke-linecap="round"/>
+        <path d="M8 12H16" stroke="#35d07f" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    BitsFlux
+</div>
+</div>
+        <div class="tagline">NETWORK MONITORING &amp; SECURITY PLATFORM</div>
+
+        <nav class="menu">
+            <div class="menu-label">Workspace</div>
+
+            <button class="active" data-page="overview">Overview</button>
+            <button data-page="monitoring">Network Monitoring</button>
+            <button data-page="intrusion">AI Intrusion Detection</button>
+
+            <div class="menu-label">Security</div>
+
+            <button data-page="alerts">Security Information</button>
+            <button data-page="logout">Logout</button>
+        </nav>
+    </aside>
+
+    <main>
+        <header>
+          
+             <div class="card" style="margin-bottom: 24px; border-color: var(--blue);">
+        <h3>Network Health Performance</h3>
+        <p class="muted">Calculated in real-time based on active threats and rogue devices.</p>
+        
+        <div style="display: flex; align-items: center; gap: 20px; margin-top: 15px;">
+            <div style="font-size: 40px; font-weight: bold; width: 120px;" id="healthScore">100%</div>
+            
+       
+                <div style="flex: 1; height: 15px; background: #29364b; border-radius: 10px; overflow: hidden;">
+                <div id="healthBar" style="height: 100%; width: 100%; background: var(--green); transition: width 0.5s;"></div>
+            </div>
+        </div>
+        <p style="margin-top: 10px; font-size: 12px;" id="healthReason">All systems secure.</p>
+      </div>
+       <span class="connection"> BitsFlux Portal</span>
+             
+        </header>
+
+        <div class="content">
+        
+            <section id="overview" class="page active">
+                <h2>Welcome to BitsFlux</h2>
+
+                <p class="muted">
+                    Central workspace for network discovery, performance
+                    monitoring and AI-assisted intrusion detection.
+                </p>
+
+                <div class="network-config">
+                    <h3>Network Scan Settings</h3>
+
+                    <div class="field-row">
+                        <label for="gatewayInput">Default Gateway</label>
+                        <input type="text" id="gatewayInput" placeholder="192.168.x.x">
+                    </div>
+
+                    <div class="field-row">
+                        <label for="subnetInput">Subnet (CIDR)</label>
+                        <input type="text" id="subnetInput" placeholder="192.168.x.0/24">
+                    </div>
+
+                    <button id="scanBtn" class="action">Scan Subnet</button>
+                    <span id="scanStatus" role="status"></span>
+                </div>
+
+                <div class="cards">
+                    <article class="card">
+                        <h3>Network Monitoring</h3>
+                        <p>
+                            Discover devices, inspect unknown devices,
+                            approve equipment and review network performance.
+                        </p>
+                        <button class="action" data-go="monitoring">Open Monitoring</button>
+                    </article>
+
+                    <article class="card">
+                        <h3>AI Intrusion Detection</h3>
+                        <p>
+                            Run the trained model against the configured
+                            simulation data and inspect predictions.
+                        </p>
+                        <button class="action" data-go="intrusion">Open Intrusion Detection</button>
+                    </article>
+
+                    <article class="card">
+                        <h3>Unified Security</h3>
+                        <p>
+                            Review unknown network devices and AI-predicted
+                            attacks from the connected intrusion dashboard.
+                        </p>
+                        <button class="action" data-go="alerts">View Information</button>
+                    </article>
+                </div>
+
+                <div class="note">
+                    Security Information receives simulation predictions
+                    from the AI Intrusion Detection frame while this portal
+                    remains open.
+                </div>
+            </section>
+
+            
+            <section id="monitoring" class="page">
+                <p class="muted">
+                    Device discovery, approval, inventory and network performance.
+                </p>
+
+                <div class="frame-wrap">
+                    <iframe id="monitorFrame" title="Network monitoring" src="/dashboard"></iframe>
+                </div>
+            </section>
+
+            
+            <section id="intrusion" class="page">
+                <p class="muted">Model predictions and attack simulation.</p>
+
+                <div class="frame-wrap">
+                    <iframe title="Intrusion detection" src="/live"></iframe>
+                </div>
+            </section>
+
+            
+            <section id="alerts" class="page">
+                <h2>Security Information</h2>
+
+                <p class="muted">
+                    Review unapproved network devices and AI-predicted attacks.
+                </p>
+
+                <div class="cards">
+                    <article class="card">
+                        <h3>Unknown Devices</h3>
+                        <div class="number blue" id="unknownDeviceCount">0</div>
+                        <p class="muted">Devices awaiting approval</p>
+                    </article>
+
+                    <article class="card">
+                        <h3>AI Attack Alerts</h3>
+                        <div class="number red" id="securityAttackCount">0</div>
+                        <p class="muted">Attack predictions received in this portal session</p>
+                    </article>
+                </div>
+
+                <div class="card" style="margin-top:20px">
+                    <h3>Unknown Devices</h3>
+                    <p class="muted">Devices that have not yet been approved.</p>
+
+                    <div id="unknownDevices" class="cards">
+                        <article class="card">
+                            <p class="muted">Loading unknown devices...</p>
+                        </article>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top:20px">
+                    <div class="alert-toolbar">
+                        <div>
+                            <h3>AI Attack Alerts</h3>
+                            <p class="muted">
+                                Attack predictions received from the BitsFlux IDS.
+                            </p>
+                        </div>
+
+                        <button id="clearAttackAlerts" class="action">
+                            Clear Alerts
+                        </button>
+                    </div>
+
+                    <div id="attackAlerts" class="cards">
+                        <p class="muted alert-empty">Waiting for attack predictions...</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>
+
+<script src="/static/dashboard.js"></script>
+
+</body>
+</html>

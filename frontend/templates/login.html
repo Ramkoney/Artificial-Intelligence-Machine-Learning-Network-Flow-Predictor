@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BitsFlux — Login</title>
+    <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+    <div class="brand">
+        <h1>BitsFlux</h1>
+        <span class="tagline">Network Monitoring System</span>
+    </div>
+</header>
+
+<main>
+    <section class="form-wrap login-wrap">
+        <h2>Administrator Login</h2>
+        <p class="hint">
+            Enter your credentials and MFA code to access the monitoring dashboard.
+        </p>
+
+        <form id="loginForm">
+            <label>Username *
+                <input type="text" id="username" required
+                       placeholder="e.g. admin" autocomplete="username" />
+            </label>
+
+            <label>Password *
+                <input type="password" id="password" required
+                       placeholder="••••••••" autocomplete="current-password" />
+            </label>
+
+            <label>MFA Code *
+                <input type="text" id="mfa_code" required
+                       inputmode="numeric" pattern="[0-9]{6}"
+                       maxlength="6"
+                       placeholder="6-digit code from your authenticator"
+                       autocomplete="one-time-code" />
+            </label>
+
+            <div class="form-actions">
+                <button type="submit" class="btn-primary">Login</button>
+                <span id="loginMsg" class="msg" role="status" aria-live="polite"></span>
+            </div>
+        </form>
+    </section>
+</main>
+
+<script>
+document.getElementById("loginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const msg = document.getElementById("loginMsg");
+    msg.textContent = "";
+    msg.style.color = "";
+
+    const payload = {
+        username: document.getElementById("username").value.trim(),
+        password: document.getElementById("password").value,
+        mfa_code: document.getElementById("mfa_code").value.trim(),
+    };
+
+    try {
+        const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",  
+            body: JSON.stringify(payload),
+        });
+
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.error || "Login failed");
+
+          sessionStorage.setItem("bitsflux_user", body.username || payload.username);
+
+        msg.textContent = "✓ Login successful. Redirecting...";
+        msg.style.color = "#28a745";
+
+        setTimeout(() => {
+            window.location.href = "/portal";
+        }, 600);
+    } catch (err) {
+        msg.textContent = "✗ " + err.message;
+        msg.style.color = "#dc3545";
+    }
+});
+</script>
+</body>
+</html>

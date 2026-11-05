@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitsFlux | Live Network Monitoring</title>
+    <link rel="stylesheet" href="/static/live_style.css"/>
+</head>
+
+<body>
+<div class="container">
+
+    <header class="header">
+        <div>
+            <h1>Live Network Monitoring</h1>
+            <p class="subtitle">
+                Monitor network flows and run AI-based intrusion predictions.
+            </p>
+        </div>
+
+        <div class="connection-status">
+            <span id="connectionDot" class="status-dot"></span>
+            <span id="connectionText">Connecting to live stream...</span>
+        </div>
+    </header>
+
+  
+    <section class="stats-grid">
+        <div class="stat-card">
+            <p>Total live events</p>
+            <h2 id="total">0</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Attacks detected</p>
+            <h2 id="attacks">0</h2>
+        </div>
+
+        <div class="stat-card">
+            <p>Normal traffic</p>
+            <h2 id="normals">0</h2>
+        </div>
+    </section>
+
+
+    <section class="panel">
+        <div class="toolbar">
+            <div>
+                <h2>AI Attack Simulation</h2>
+                <p class="subtitle">
+                    Display model predictions individually.
+                </p>
+            </div>
+
+            <div class="actions">
+                <button id="startBtn" class="btn-primary">▶ Start Simulation</button>
+                <button id="stopBtn" class="btn-secondary" disabled>■ Stop Simulation</button>
+                <button id="restartBtn" class="btn-secondary">↻ Restart</button>
+                <button id="clearBtn" class="btn-danger">Clear table</button>
+            </div>
+        </div>
+
+        <div id="simulationNotice" class="simulation-notice"></div>
+
+        <div class="simulation-progress">
+            <div class="progress-heading">
+                <span>Prediction progress</span>
+                <strong id="predictionCounter">0 / 0</strong>
+            </div>
+
+            <div class="progress-track">
+                <div id="predictionProgress"></div>
+            </div>
+
+            <p id="predictionStatus" class="subtitle">
+                Waiting to start simulation...
+            </p>
+        </div>
+
+        <div id="simulationResults">
+            <h2>Latest simulation results</h2>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Scenario</th>
+                            <th>AI Prediction</th>
+                            <th>Confidence</th>
+                            <th>Expected Result</th>
+                        </tr>
+                    </thead>
+                    <tbody id="simulationRows">
+                        <tr>
+                            <td colspan="5" class="empty-state">No predictions displayed yet.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="section-heading">
+            <div>
+                <h2>Live Network Flow Events</h2>
+                <p class="subtitle">Events received from the Flask server through SSE.</p>
+            </div>
+            <!-- Added counter here like the simulation table -->
+            <span class="subtitle" id="liveEventCounter" style="font-weight: bold; color: var(--blue);">Showing 0 events</span>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Source IP</th>
+                        <th>Destination IP</th>
+                        <th>Protocol</th>
+                        <th>Prediction</th>
+                        <th>Confidence</th>
+                    </tr>
+                </thead>
+                <tbody id="rows">
+                    <tr id="emptyRow">
+                        <td colspan="6" class="empty-state">
+                            Waiting for live network events...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+</div>
+
+<script>
+"use strict";
+
+// --- DOM Elements ---
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
+const restartBtn = document.getElementById("restartBtn");
+const clearBtn = document.getElementById("clearBtn");
+
+const notice = document.getElementById("simulationNotice");
+const simulationRows = document.getElementById("simulationRows");
+
+const predictionCounter = document.getElementById("predictionCounter");
+const predictionProgress = document.getElementById("predictionProgress");
+const predictionStatus = document.getElementById("predictionStatus");
+
+const connectionDot = document.getElementById("connectionDot");
+const connectionText = document.getElementById("connectionText");
+
+const flowRows = document.getElementById("rows");
+const liveEventCounter = document.getElementById("liveEventCounter");
+
+// --- State ---
+let total = 0;
+let attacks = 0;
+let normals = 0;
+
+let predictionResults = [];
+let currentIndex = 0;
+
+let simulationTimer = null;
+let isRunning = false;
+let isLoading = false;
+
+// --- Live Event Queue (For 3-second pacing) ---
+let liveEventQueue = [];
+let liveEventTimer = null;
+
+const DISPLAY_INTERVAL = 3000; // 3 seconds
+
+// --- Helpers ---
+function updateStats() {
+    document.getElementById("total").textContent = total;
+    document.getElementById("attacks").textContent = attacks;
+    document.getElementById("normals").textContent = normals;
+    liveEventCounter.textContent = `Showing ${total} events`;
+}
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function isAttackPrediction(value) {
+    const prediction = String(value || "").toLowerCase();
+    return (
+        prediction.includes("attack") ||
+        prediction.includes("malicious") ||
+        prediction.includes("intrusion") ||
+        prediction.includes("anomaly") ||
+        prediction === "1"
+    );
+}
+
+function getPredictionLabel(result) {
+    return result.prediction ?? result.label ?? result.result ?? "Unknown";
+}
+
+function getConfidence(result) {
+    const value = result.confidence_percent ?? result.attack_probability_percent ?? result.confidence ?? result.probability;
+    if (value === undefined || value === null) return "N/A";
+    const number = Number(value);
+    if (!Number.isFinite(number)) return escapeHtml(value);
+    const percentage = number <= 1 ? number * 100 : number;
+    return percentage.toFixed(2) + "%";
+}
+
+function showNotice(message, type = "info") {
+    notice.textContent = message;
+    notice.classList.add("visible");
+    notice.style.borderColor = type === "error" ? "#ef4444" : (type === "success" ? "#22c55e" : "#263750");
+}
+
+// --- Live Stream (SSE) ---
+let eventSource = null;
+
+function connectLiveStream() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource("/stream");
+
+    eventSource.onopen = function () {
+        connectionDot.className = "status-dot connected";
+        connectionText.textContent = "Live stream connected";
+    };
+
+    eventSource.onmessage = function (event) {
+        try {
+            const data = JSON.parse(event.data);
+            // Push to queue instead of displaying immediately
+            liveEventQueue.push(data);
+        } catch (error) {
+            console.error("Could not parse live event:", error);
+        }
+    };
+
+    eventSource.onerror = function () {
+        connectionDot.className = "status-dot disconnected";
+        connectionText.textContent = "Reconnecting to live stream...";
+    };
+}
+
+// The 3-second pacer for the Live Table
+function processNextLiveEvent() {
+    if (liveEventQueue.length === 0) return; // Nothing to process
+
+    const event = liveEventQueue.shift(); // Remove the first item from the queue
+
+    const prediction = getPredictionLabel(event);
+    const attack = isAttackPrediction(prediction);
+
+    total++;
+    if (attack) attacks++;
+    else normals++;
+
+    updateStats();
+
+    const emptyRow = document.getElementById("emptyRow");
+    if (emptyRow) emptyRow.remove();
+
+    const timestamp = event.timestamp || new Date().toLocaleTimeString();
+    const sourceIP = event.src_ip || event.source_ip || "N/A";
+    const destinationIP = event.dst_ip || event.destination_ip || "N/A";
+    const protocol = event.protocol || "N/A";
+    const confidence = getConfidence(event);
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+        <td>${escapeHtml(timestamp)}</td>
+        <td>${escapeHtml(sourceIP)}</td>
+        <td>${escapeHtml(destinationIP)}</td>
+        <td>${escapeHtml(protocol)}</td>
+        <td><span class="badge ${attack ? "badge-attack" : "badge-normal"}">${escapeHtml(prediction)}</span></td>
+        <td>${confidence}</td>
+    `;
+
+    flowRows.prepend(row);
+
+    while (flowRows.children.length > 100) {
+        flowRows.removeChild(flowRows.lastElementChild);
+    }
+
+    // Send the result to the Parent Dashboard (Security Info)
+    window.parent.postMessage({
+        type: "BitsFlux_ATTACK_RESULT",
+        result: event
+    }, "*");
+}
+
+// --- AI Simulation Logic ---
+async function loadPredictions() {
+    if (isLoading) return false;
+    isLoading = true;
+    startBtn.disabled = true;
+
+    predictionStatus.textContent = "Loading predictions from the AI model...";
+    showNotice("Loading simulation predictions...");
+
+    try {
+        const response = await fetch("/api/simulate/attacks", { method: "POST" });
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.message || data.error || "Server error");
+        if (!Array.isArray(data.results)) throw new Error("Invalid results array.");
+
+        predictionResults = data.results;
+        currentIndex = 0;
+        simulationRows.innerHTML = "";
+
+        if (predictionResults.length === 0) {
+            simulationRows.innerHTML = `<tr><td colspan="5" class="empty-state">No results returned.</td></tr>`;
+            predictionCounter.textContent = "0 / 0";
+            predictionProgress.style.width = "0%";
+            showNotice("Simulation returned no predictions.", "error");
+            return false;
+        }
+
+        predictionCounter.textContent = `0 / ${predictionResults.length}`;
+        predictionProgress.style.width = "0%";
+        predictionStatus.textContent = `${predictionResults.length} predictions loaded. Ready to start.`;
+        showNotice(`${predictionResults.length} predictions loaded successfully.`, "success");
+        return true;
+    } catch (error) {
+        console.error("Simulation loading error:", error);
+        predictionStatus.textContent = "Could not load predictions.";
+        showNotice(error.message, "error");
+        return false;
+    } finally {
+        isLoading = false;
+        startBtn.disabled = false;
+    }
+}
+
+function displayPrediction(index) {
+    if (index < 0 || index >= predictionResults.length) return;
+
+    const result = predictionResults[index];
+    const prediction = getPredictionLabel(result);
+    const attack = isAttackPrediction(prediction);
+
+    const scenario = result.scenario || result.attack_type || "Network flow";
+    const expected = result.expected_label ?? "N/A";
+    const confidence = getConfidence(result);
+
+    const row = document.createElement("tr");
+    row.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${escapeHtml(scenario)}</td>
+        <td><span class="badge ${attack ? "badge-attack" : "badge-normal"}">${escapeHtml(prediction)}</span></td>
+        <td>${confidence}</td>
+        <td>${escapeHtml(expected)}</td>
+    `;
+
+    simulationRows.appendChild(row);
+
+    currentIndex = index + 1;
+    const percentage = (currentIndex / predictionResults.length) * 100;
+
+    predictionCounter.textContent = `${currentIndex} / ${predictionResults.length}`;
+    predictionProgress.style.width = `${percentage}%`;
+    predictionStatus.textContent = `Displaying prediction ${currentIndex} of ${predictionResults.length}`;
+
+    window.parent.postMessage({
+        type: "BitsFlux_ATTACK_RESULT",
+        result: result
+    }, "*");
+}
+
+function finishSimulation() {
+    if (simulationTimer !== null) {
+        clearInterval(simulationTimer);
+        simulationTimer = null;
+    }
+    isRunning = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    predictionStatus.textContent = `Simulation completed: ${currentIndex} of ${predictionResults.length} displayed.`;
+    showNotice("Simulation completed successfully.", "success");
+}
+
+async function startSimulation() {
+    if (isRunning || isLoading) return;
+    if (predictionResults.length === 0) {
+        const loaded = await loadPredictions();
+        if (!loaded) return;
+    }
+
+    if (currentIndex >= predictionResults.length) {
+        currentIndex = 0;
+        simulationRows.innerHTML = "";
+        predictionProgress.style.width = "0%";
+        predictionCounter.textContent = `0 / ${predictionResults.length}`;
+    }
+
+    isRunning = true;
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+    restartBtn.disabled = false;
+    showNotice("Simulation is running...");
+
+    displayPrediction(currentIndex);
+
+    if (currentIndex >= predictionResults.length) {
+        finishSimulation();
+        return;
+    }
+
+    simulationTimer = setInterval(function () {
+        if (currentIndex < predictionResults.length) {
+            displayPrediction(currentIndex);
+        }
+        if (currentIndex >= predictionResults.length) {
+            finishSimulation();
+        }
+    }, DISPLAY_INTERVAL);
+}
+
+function stopSimulation() {
+    if (simulationTimer !== null) {
+        clearInterval(simulationTimer);
+        simulationTimer = null;
+    }
+    isRunning = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    predictionStatus.textContent = `Simulation paused at prediction ${currentIndex} of ${predictionResults.length}.`;
+    showNotice("Simulation paused. Click Start Simulation to continue.");
+}
+
+function restartSimulation() {
+    if (simulationTimer !== null) {
+        clearInterval(simulationTimer);
+        simulationTimer = null;
+    }
+    isRunning = false;
+    isLoading = false;
+    predictionResults = [];
+    currentIndex = 0;
+    simulationRows.innerHTML = `<tr><td colspan="5" class="empty-state">Simulation reset. Click Start Simulation to begin again.</td></tr>`;
+    predictionCounter.textContent = "0 / 0";
+    predictionProgress.style.width = "0%";
+    predictionStatus.textContent = "Waiting to start simulation...";
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    showNotice("Simulation has been reset.");
+}
+
+function clearLiveTable() {
+    total = 0;
+    attacks = 0;
+    normals = 0;
+    liveEventQueue = []; // Clear the queue
+    updateStats();
+    
+    flowRows.innerHTML = `<tr id="emptyRow"><td colspan="6" class="empty-state">Live flow table cleared. Waiting for new events...</td></tr>`;
+}
+
+// --- Bind Buttons ---
+startBtn.addEventListener("click", startSimulation);
+stopBtn.addEventListener("click", stopSimulation);
+restartBtn.addEventListener("click", restartSimulation);
+clearBtn.addEventListener("click", clearLiveTable);
+
+// --- Init ---
+updateStats();
+connectLiveStream();
+
+// Start the 3-second pacer for live events
+liveEventTimer = setInterval(processNextLiveEvent, DISPLAY_INTERVAL);
+
+</script>
+</body>
+</html>
